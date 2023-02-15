@@ -182,10 +182,12 @@ func (miq *MixinIDQuery) AllX(ctx context.Context) []*MixinID {
 }
 
 // IDs executes the query and returns a list of MixinID IDs.
-func (miq *MixinIDQuery) IDs(ctx context.Context) ([]uuid.UUID, error) {
-	var ids []uuid.UUID
+func (miq *MixinIDQuery) IDs(ctx context.Context) (ids []uuid.UUID, err error) {
+	if miq.ctx.Unique == nil && miq.path != nil {
+		miq.Unique(true)
+	}
 	ctx = setContextOp(ctx, miq.ctx, "IDs")
-	if err := miq.Select(mixinid.FieldID).Scan(ctx, &ids); err != nil {
+	if err = miq.Select(mixinid.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -367,20 +369,12 @@ func (miq *MixinIDQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (miq *MixinIDQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   mixinid.Table,
-			Columns: mixinid.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeUUID,
-				Column: mixinid.FieldID,
-			},
-		},
-		From:   miq.sql,
-		Unique: true,
-	}
+	_spec := sqlgraph.NewQuerySpec(mixinid.Table, mixinid.Columns, sqlgraph.NewFieldSpec(mixinid.FieldID, field.TypeUUID))
+	_spec.From = miq.sql
 	if unique := miq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if miq.path != nil {
+		_spec.Unique = true
 	}
 	if fields := miq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))

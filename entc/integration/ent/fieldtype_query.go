@@ -184,10 +184,12 @@ func (ftq *FieldTypeQuery) AllX(ctx context.Context) []*FieldType {
 }
 
 // IDs executes the query and returns a list of FieldType IDs.
-func (ftq *FieldTypeQuery) IDs(ctx context.Context) ([]int, error) {
-	var ids []int
+func (ftq *FieldTypeQuery) IDs(ctx context.Context) (ids []int, err error) {
+	if ftq.ctx.Unique == nil && ftq.path != nil {
+		ftq.Unique(true)
+	}
 	ctx = setContextOp(ctx, ftq.ctx, "IDs")
-	if err := ftq.Select(fieldtype.FieldID).Scan(ctx, &ids); err != nil {
+	if err = ftq.Select(fieldtype.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -379,20 +381,12 @@ func (ftq *FieldTypeQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (ftq *FieldTypeQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   fieldtype.Table,
-			Columns: fieldtype.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: fieldtype.FieldID,
-			},
-		},
-		From:   ftq.sql,
-		Unique: true,
-	}
+	_spec := sqlgraph.NewQuerySpec(fieldtype.Table, fieldtype.Columns, sqlgraph.NewFieldSpec(fieldtype.FieldID, field.TypeInt))
+	_spec.From = ftq.sql
 	if unique := ftq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if ftq.path != nil {
+		_spec.Unique = true
 	}
 	if fields := ftq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))

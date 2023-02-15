@@ -205,10 +205,12 @@ func (iq *InfoQuery) AllX(ctx context.Context) []*Info {
 }
 
 // IDs executes the query and returns a list of Info IDs.
-func (iq *InfoQuery) IDs(ctx context.Context) ([]int, error) {
-	var ids []int
+func (iq *InfoQuery) IDs(ctx context.Context) (ids []int, err error) {
+	if iq.ctx.Unique == nil && iq.path != nil {
+		iq.Unique(true)
+	}
 	ctx = setContextOp(ctx, iq.ctx, "IDs")
-	if err := iq.Select(info.FieldID).Scan(ctx, &ids); err != nil {
+	if err = iq.Select(info.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -442,20 +444,12 @@ func (iq *InfoQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (iq *InfoQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   info.Table,
-			Columns: info.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: info.FieldID,
-			},
-		},
-		From:   iq.sql,
-		Unique: true,
-	}
+	_spec := sqlgraph.NewQuerySpec(info.Table, info.Columns, sqlgraph.NewFieldSpec(info.FieldID, field.TypeInt))
+	_spec.From = iq.sql
 	if unique := iq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if iq.path != nil {
+		_spec.Unique = true
 	}
 	if fields := iq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))

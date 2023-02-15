@@ -252,10 +252,12 @@ func (mq *MetadataQuery) AllX(ctx context.Context) []*Metadata {
 }
 
 // IDs executes the query and returns a list of Metadata IDs.
-func (mq *MetadataQuery) IDs(ctx context.Context) ([]int, error) {
-	var ids []int
+func (mq *MetadataQuery) IDs(ctx context.Context) (ids []int, err error) {
+	if mq.ctx.Unique == nil && mq.path != nil {
+		mq.Unique(true)
+	}
 	ctx = setContextOp(ctx, mq.ctx, "IDs")
-	if err := mq.Select(metadata.FieldID).Scan(ctx, &ids); err != nil {
+	if err = mq.Select(metadata.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -584,20 +586,12 @@ func (mq *MetadataQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (mq *MetadataQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   metadata.Table,
-			Columns: metadata.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: metadata.FieldID,
-			},
-		},
-		From:   mq.sql,
-		Unique: true,
-	}
+	_spec := sqlgraph.NewQuerySpec(metadata.Table, metadata.Columns, sqlgraph.NewFieldSpec(metadata.FieldID, field.TypeInt))
+	_spec.From = mq.sql
 	if unique := mq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if mq.path != nil {
+		_spec.Unique = true
 	}
 	if fields := mq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))

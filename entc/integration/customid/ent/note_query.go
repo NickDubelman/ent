@@ -230,10 +230,12 @@ func (nq *NoteQuery) AllX(ctx context.Context) []*Note {
 }
 
 // IDs executes the query and returns a list of Note IDs.
-func (nq *NoteQuery) IDs(ctx context.Context) ([]schema.NoteID, error) {
-	var ids []schema.NoteID
+func (nq *NoteQuery) IDs(ctx context.Context) (ids []schema.NoteID, err error) {
+	if nq.ctx.Unique == nil && nq.path != nil {
+		nq.Unique(true)
+	}
 	ctx = setContextOp(ctx, nq.ctx, "IDs")
-	if err := nq.Select(note.FieldID).Scan(ctx, &ids); err != nil {
+	if err = nq.Select(note.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -528,20 +530,12 @@ func (nq *NoteQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (nq *NoteQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   note.Table,
-			Columns: note.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeString,
-				Column: note.FieldID,
-			},
-		},
-		From:   nq.sql,
-		Unique: true,
-	}
+	_spec := sqlgraph.NewQuerySpec(note.Table, note.Columns, sqlgraph.NewFieldSpec(note.FieldID, field.TypeString))
+	_spec.From = nq.sql
 	if unique := nq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if nq.path != nil {
+		_spec.Unique = true
 	}
 	if fields := nq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))

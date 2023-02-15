@@ -230,10 +230,12 @@ func (ttq *TweetTagQuery) AllX(ctx context.Context) []*TweetTag {
 }
 
 // IDs executes the query and returns a list of TweetTag IDs.
-func (ttq *TweetTagQuery) IDs(ctx context.Context) ([]uuid.UUID, error) {
-	var ids []uuid.UUID
+func (ttq *TweetTagQuery) IDs(ctx context.Context) (ids []uuid.UUID, err error) {
+	if ttq.ctx.Unique == nil && ttq.path != nil {
+		ttq.Unique(true)
+	}
 	ctx = setContextOp(ctx, ttq.ctx, "IDs")
-	if err := ttq.Select(tweettag.FieldID).Scan(ctx, &ids); err != nil {
+	if err = ttq.Select(tweettag.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -515,20 +517,12 @@ func (ttq *TweetTagQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (ttq *TweetTagQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   tweettag.Table,
-			Columns: tweettag.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeUUID,
-				Column: tweettag.FieldID,
-			},
-		},
-		From:   ttq.sql,
-		Unique: true,
-	}
+	_spec := sqlgraph.NewQuerySpec(tweettag.Table, tweettag.Columns, sqlgraph.NewFieldSpec(tweettag.FieldID, field.TypeUUID))
+	_spec.From = ttq.sql
 	if unique := ttq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if ttq.path != nil {
+		_spec.Unique = true
 	}
 	if fields := ttq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))

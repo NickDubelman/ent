@@ -181,10 +181,12 @@ func (ctq *CustomTypeQuery) AllX(ctx context.Context) []*CustomType {
 }
 
 // IDs executes the query and returns a list of CustomType IDs.
-func (ctq *CustomTypeQuery) IDs(ctx context.Context) ([]int, error) {
-	var ids []int
+func (ctq *CustomTypeQuery) IDs(ctx context.Context) (ids []int, err error) {
+	if ctq.ctx.Unique == nil && ctq.path != nil {
+		ctq.Unique(true)
+	}
 	ctx = setContextOp(ctx, ctq.ctx, "IDs")
-	if err := ctq.Select(customtype.FieldID).Scan(ctx, &ids); err != nil {
+	if err = ctq.Select(customtype.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -366,20 +368,12 @@ func (ctq *CustomTypeQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (ctq *CustomTypeQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   customtype.Table,
-			Columns: customtype.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: customtype.FieldID,
-			},
-		},
-		From:   ctq.sql,
-		Unique: true,
-	}
+	_spec := sqlgraph.NewQuerySpec(customtype.Table, customtype.Columns, sqlgraph.NewFieldSpec(customtype.FieldID, field.TypeInt))
+	_spec.From = ctq.sql
 	if unique := ctq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if ctq.path != nil {
+		_spec.Unique = true
 	}
 	if fields := ctq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))

@@ -443,6 +443,20 @@ type (
 	}
 )
 
+// NewUpdateSpec creates a new node update spec.
+func NewUpdateSpec(table string, columns []string, id ...*FieldSpec) *UpdateSpec {
+	spec := &UpdateSpec{
+		Node: &NodeSpec{Table: table, Columns: columns},
+	}
+	switch {
+	case len(id) == 1:
+		spec.Node.ID = id[0]
+	case len(id) > 1:
+		spec.Node.CompositeID = id
+	}
+	return spec
+}
+
 // AddModifier adds a new statement modifier to the spec.
 func (u *UpdateSpec) AddModifier(m func(*sql.UpdateBuilder)) {
 	u.Modifiers = append(u.Modifiers, m)
@@ -518,6 +532,11 @@ type DeleteSpec struct {
 	Predicate func(*sql.Selector)
 }
 
+// NewDeleteSpec creates a new node deletion spec.
+func NewDeleteSpec(table string, id *FieldSpec) *DeleteSpec {
+	return &DeleteSpec{Node: &NodeSpec{Table: table, ID: id}}
+}
+
 // DeleteNodes applies the DeleteSpec on the graph.
 func DeleteNodes(ctx context.Context, drv dialect.Driver, spec *DeleteSpec) (int, error) {
 	var (
@@ -556,6 +575,17 @@ type QuerySpec struct {
 
 	ScanValues func(columns []string) ([]any, error)
 	Assign     func(columns []string, values []any) error
+}
+
+// NewQuerySpec creates a new node query spec.
+func NewQuerySpec(table string, columns []string, id *FieldSpec) *QuerySpec {
+	return &QuerySpec{
+		Node: &NodeSpec{
+			ID:      id,
+			Table:   table,
+			Columns: columns,
+		},
+	}
 }
 
 // QueryNodes queries the nodes in the graph query and scans them to the given values.
@@ -1031,7 +1061,10 @@ func (c *creator) node(ctx context.Context, drv dialect.Driver) error {
 		// we interact with an edge-schema with composite primary key.
 		if c.ID == nil {
 			c.ensureConflict(insert)
-			query, args := insert.Query()
+			query, args, err := insert.QueryErr()
+			if err != nil {
+				return err
+			}
 			return c.tx.Exec(ctx, query, args, nil)
 		}
 		if err := c.insert(ctx, insert); err != nil {
@@ -1077,7 +1110,10 @@ func (c *creator) insert(ctx context.Context, insert *sql.InsertBuilder) error {
 		// In case of "ON CONFLICT", the record may exist in the
 		// database, and we need to get back the database id field.
 		if len(c.CreateSpec.OnConflict) == 0 {
-			query, args := insert.Query()
+			query, args, err := insert.QueryErr()
+			if err != nil {
+				return err
+			}
 			return c.tx.Exec(ctx, query, args, nil)
 		}
 	}
@@ -1510,8 +1546,8 @@ func setTableColumns(fields []*FieldSpec, edges map[Rel][]*EdgeSpec, set func(st
 
 // insertLastID invokes the insert query on the transaction and returns the LastInsertID.
 func (c *creator) insertLastID(ctx context.Context, insert *sql.InsertBuilder) error {
-	query, args := insert.Query()
-	if err := insert.Err(); err != nil {
+	query, args, err := insert.QueryErr()
+	if err != nil {
 		return err
 	}
 	// MySQL does not support the "RETURNING" clause.
@@ -1558,8 +1594,8 @@ func (c *creator) insertLastID(ctx context.Context, insert *sql.InsertBuilder) e
 
 // insertLastIDs invokes the batch insert query on the transaction and returns the LastInsertID of all entities.
 func (c *batchCreator) insertLastIDs(ctx context.Context, tx dialect.ExecQuerier, insert *sql.InsertBuilder) error {
-	query, args := insert.Query()
-	if err := insert.Err(); err != nil {
+	query, args, err := insert.QueryErr()
+	if err != nil {
 		return err
 	}
 	// MySQL does not support the "RETURNING" clause.

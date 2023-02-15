@@ -209,10 +209,12 @@ func (ftq *FileTypeQuery) AllX(ctx context.Context) []*FileType {
 }
 
 // IDs executes the query and returns a list of FileType IDs.
-func (ftq *FileTypeQuery) IDs(ctx context.Context) ([]int, error) {
-	var ids []int
+func (ftq *FileTypeQuery) IDs(ctx context.Context) (ids []int, err error) {
+	if ftq.ctx.Unique == nil && ftq.path != nil {
+		ftq.Unique(true)
+	}
 	ctx = setContextOp(ctx, ftq.ctx, "IDs")
-	if err := ftq.Select(filetype.FieldID).Scan(ctx, &ids); err != nil {
+	if err = ftq.Select(filetype.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -462,20 +464,12 @@ func (ftq *FileTypeQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (ftq *FileTypeQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   filetype.Table,
-			Columns: filetype.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: filetype.FieldID,
-			},
-		},
-		From:   ftq.sql,
-		Unique: true,
-	}
+	_spec := sqlgraph.NewQuerySpec(filetype.Table, filetype.Columns, sqlgraph.NewFieldSpec(filetype.FieldID, field.TypeInt))
+	_spec.From = ftq.sql
 	if unique := ftq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if ftq.path != nil {
+		_spec.Unique = true
 	}
 	if fields := ftq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))

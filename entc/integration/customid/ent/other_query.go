@@ -182,10 +182,12 @@ func (oq *OtherQuery) AllX(ctx context.Context) []*Other {
 }
 
 // IDs executes the query and returns a list of Other IDs.
-func (oq *OtherQuery) IDs(ctx context.Context) ([]sid.ID, error) {
-	var ids []sid.ID
+func (oq *OtherQuery) IDs(ctx context.Context) (ids []sid.ID, err error) {
+	if oq.ctx.Unique == nil && oq.path != nil {
+		oq.Unique(true)
+	}
 	ctx = setContextOp(ctx, oq.ctx, "IDs")
-	if err := oq.Select(other.FieldID).Scan(ctx, &ids); err != nil {
+	if err = oq.Select(other.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -345,20 +347,12 @@ func (oq *OtherQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (oq *OtherQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   other.Table,
-			Columns: other.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeOther,
-				Column: other.FieldID,
-			},
-		},
-		From:   oq.sql,
-		Unique: true,
-	}
+	_spec := sqlgraph.NewQuerySpec(other.Table, other.Columns, sqlgraph.NewFieldSpec(other.FieldID, field.TypeOther))
+	_spec.From = oq.sql
 	if unique := oq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if oq.path != nil {
+		_spec.Unique = true
 	}
 	if fields := oq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))

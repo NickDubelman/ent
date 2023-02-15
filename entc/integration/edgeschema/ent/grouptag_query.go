@@ -229,10 +229,12 @@ func (gtq *GroupTagQuery) AllX(ctx context.Context) []*GroupTag {
 }
 
 // IDs executes the query and returns a list of GroupTag IDs.
-func (gtq *GroupTagQuery) IDs(ctx context.Context) ([]int, error) {
-	var ids []int
+func (gtq *GroupTagQuery) IDs(ctx context.Context) (ids []int, err error) {
+	if gtq.ctx.Unique == nil && gtq.path != nil {
+		gtq.Unique(true)
+	}
 	ctx = setContextOp(ctx, gtq.ctx, "IDs")
-	if err := gtq.Select(grouptag.FieldID).Scan(ctx, &ids); err != nil {
+	if err = gtq.Select(grouptag.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -514,20 +516,12 @@ func (gtq *GroupTagQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (gtq *GroupTagQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   grouptag.Table,
-			Columns: grouptag.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: grouptag.FieldID,
-			},
-		},
-		From:   gtq.sql,
-		Unique: true,
-	}
+	_spec := sqlgraph.NewQuerySpec(grouptag.Table, grouptag.Columns, sqlgraph.NewFieldSpec(grouptag.FieldID, field.TypeInt))
+	_spec.From = gtq.sql
 	if unique := gtq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if gtq.path != nil {
+		_spec.Unique = true
 	}
 	if fields := gtq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))

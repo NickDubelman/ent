@@ -230,10 +230,12 @@ func (isq *IntSIDQuery) AllX(ctx context.Context) []*IntSID {
 }
 
 // IDs executes the query and returns a list of IntSID IDs.
-func (isq *IntSIDQuery) IDs(ctx context.Context) ([]sid.ID, error) {
-	var ids []sid.ID
+func (isq *IntSIDQuery) IDs(ctx context.Context) (ids []sid.ID, err error) {
+	if isq.ctx.Unique == nil && isq.path != nil {
+		isq.Unique(true)
+	}
 	ctx = setContextOp(ctx, isq.ctx, "IDs")
-	if err := isq.Select(intsid.FieldID).Scan(ctx, &ids); err != nil {
+	if err = isq.Select(intsid.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -506,20 +508,12 @@ func (isq *IntSIDQuery) sqlCount(ctx context.Context) (int, error) {
 }
 
 func (isq *IntSIDQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   intsid.Table,
-			Columns: intsid.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt64,
-				Column: intsid.FieldID,
-			},
-		},
-		From:   isq.sql,
-		Unique: true,
-	}
+	_spec := sqlgraph.NewQuerySpec(intsid.Table, intsid.Columns, sqlgraph.NewFieldSpec(intsid.FieldID, field.TypeInt64))
+	_spec.From = isq.sql
 	if unique := isq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if isq.path != nil {
+		_spec.Unique = true
 	}
 	if fields := isq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
